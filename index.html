@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>工單拍照上傳</title>
+<style>
+:root{--bg:#111418;--card:#1e232a;--tx:#f2f4f7;--mu:#9aa4b2;--ac:#3b82f6;--ok:#22c55e;--er:#ef4444;--wn:#f59e0b;--bd:#323a45}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,"Noto Sans TC","PingFang TC",sans-serif;overflow:hidden}
+section{display:none;position:fixed;inset:0;flex-direction:column;padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}
+section.on{display:flex}
+button{font:inherit;border:0;border-radius:12px;padding:12px 18px;background:var(--ac);color:#fff;cursor:pointer}
+button.g{background:var(--card);border:1px solid var(--bd);color:var(--tx)}
+button:disabled{opacity:.4}
+
+/* 1 輸入工單 */
+#s1{justify-content:center;align-items:center;padding:20px}
+.box{width:100%;max-width:440px;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:20px}
+.box h1{font-size:22px;margin:0 0 14px}
+.row{display:flex;gap:8px}
+input[readonly]{opacity:.65}
+input{width:100%;font-size:20px;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+#go{width:100%;margin-top:14px;font-size:20px;padding:14px;background:var(--ok)}
+details{margin-top:14px;color:var(--mu);font-size:14px}
+details input{font-size:14px;margin-top:8px}
+summary{cursor:pointer}
+
+/* 2 相機 */
+#s2{background:#000}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;background:rgba(0,0,0,.6)}
+.top b{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top button{padding:8px 12px;font-size:15px}
+#v{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+.bar{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;background:rgba(0,0,0,.6)}
+#thumb{position:relative;width:64px;height:64px;border-radius:10px;border:2px solid #fff;background:#222 center/cover no-repeat;padding:0;overflow:visible}
+#cnt{position:absolute;top:-8px;right:-8px;min-width:22px;height:22px;border-radius:11px;background:var(--ac);font-size:13px;line-height:22px;text-align:center}
+#st{position:absolute;bottom:-6px;left:-6px;font-size:16px}
+#shot{width:78px;height:78px;border-radius:50%;background:#fff;border:6px solid #888;padding:0}
+#shot:active{transform:scale(.93)}
+.sp{width:64px}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .2s}
+
+/* 3 檢視 */
+#s3{background:#000}
+#stage{flex:1;min-height:0;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center}
+#big{max-width:100%;max-height:100%;transform-origin:center;user-select:none;-webkit-user-drag:none}
+.bot{display:flex;justify-content:center;align-items:center;gap:8px;padding:10px;background:rgba(0,0,0,.6)}
+.bot button{padding:10px 14px}
+#zp{min-width:56px;text-align:center}
+
+/* 4 掃描 */
+#s4{background:#000}
+#sv,#reader{flex:1;min-height:0;width:100%;object-fit:cover}
+.hint{text-align:center;padding:10px;color:var(--mu)}
+
+#toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0));transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:8px 16px;border-radius:20px;font-size:14px;display:none;z-index:9;max-width:90%}
+</style>
+</head>
+<body>
+
+<!-- 1. 輸入工單/序號 -->
+<section id="s1" class="on">
+  <div class="box">
+    <h1 id="h1s">📋 工單／序號</h1>
+    <label style="font-size:14px;color:var(--mu)">工單（必填）→ 第一層資料夾</label>
+    <div class="row" style="margin:4px 0 12px">
+      <input id="order" placeholder="掃描或輸入工單" autocomplete="off" autocapitalize="characters" enterkeyhint="next">
+      <button class="g" id="scanOrder">📷</button>
+    </div>
+    <label style="font-size:14px;color:var(--mu)">序號（選填）→ 第二層資料夾，不填則直接存在工單資料夾</label>
+    <div class="row" style="margin-top:4px">
+      <input id="serial" placeholder="掃描或輸入序號（可不填）" autocomplete="off" autocapitalize="characters" enterkeyhint="go">
+      <button class="g" id="scanSerial">📷</button>
+    </div>
+    <button id="go">開始照相</button>
+    <button class="g" id="finishS1" style="display:none;width:100%;margin-top:10px;color:var(--er)">結束工單（全部完成）</button>
+    <details>
+      <summary>⚙ 設定（Apps Script 網址）</summary>
+      <input id="url" placeholder="https://script.google.com/macros/s/.../exec">
+      <button class="g" id="saveUrl" style="margin-top:8px;padding:8px 14px;font-size:14px">儲存網址</button>
+    </details>
+  </div>
+</section>
+
+<!-- 2. 相機 -->
+<section id="s2">
+  <div class="top"><b id="title"></b><span><button class="g" id="flip">🔄</button> <button class="g" id="end">結束拍照</button></span></div>
+  <video id="v" autoplay playsinline muted></video>
+  <div id="flash"></div>
+  <div class="bar">
+    <button id="thumb" aria-label="檢視照片"><span id="cnt">0</span><span id="st"></span></button>
+    <button id="shot" aria-label="拍照"></button>
+    <button id="finish" style="background:var(--er);padding:10px 12px;font-size:15px;min-width:64px">結束<br>工單</button>
+  </div>
+</section>
+
+<!-- 3. 檢視 -->
+<section id="s3">
+  <div class="top"><button class="g" id="back">← 返回</button><b id="info"></b><button id="del" style="background:var(--er)">🗑 刪除</button></div>
+  <div id="stage"><img id="big" alt="照片"></div>
+  <div class="bot">
+    <button class="g" id="prev">◀</button>
+    <button class="g" id="zo">－</button><span id="zp">100%</span><button class="g" id="zi">＋</button>
+    <button class="g" id="next">▶</button>
+    <button class="g" id="retry" style="display:none">重新上傳</button>
+  </div>
+</section>
+
+<!-- 4. 掃描 -->
+<section id="s4">
+  <div class="top"><b>對準條碼／QR Code</b><button class="g" id="scanClose">✕ 關閉</button></div>
+  <video id="sv" autoplay playsinline muted></video>
+  <div id="reader" style="display:none"></div>
+  <div class="hint">掃到後會自動填入</div>
+</section>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const v=$('v'), big=$('big');
+let orderActive=false, order='', serial='', photos=[], stream=null, facing='environment', cur=0, seq=0;
+
+/* ---------- 共用 ---------- */
+function show(id){
+  document.querySelectorAll('section').forEach(s=>s.classList.toggle('on', s.id===id || (id==='s3' && s.id==='s2')));
+  if(id==='s2') ensureCam();
+}
+let tt; function toast(t){ const e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(tt); tt=setTimeout(()=>e.style.display='none',2500); }
+function cleanName(s){ return s.trim().replace(/[\\\/:*?"<>|]/g,'_'); }
+function gasUrl(){ return ($('url').value||'').trim(); }
+function b64(blob){ return new Promise((ok,no)=>{ const r=new FileReader(); r.onload=()=>ok(r.result.split(',')[1]); r.onerror=no; r.readAsDataURL(blob); }); }
+async function api(body){
+  const r = await fetch(gasUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
+  const j = await r.json(); if(!j.ok) throw new Error(j.error||'失敗'); return j;
+}
+const ICON={up:'⏳',ok:'✅',err:'⚠️'};
+
+try{ $('url').value = localStorage.getItem('gasUrl')||''; serial = ''; }catch(e){}
+$('saveUrl').onclick=()=>{ try{ localStorage.setItem('gasUrl',gasUrl()); toast('✅ 網址已儲存'); }catch(e){ toast('無法儲存'); } };
+
+/* ---------- 1. 開始 ---------- */
+$('order').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); if($('order').value.trim()) $('serial').focus(); } });
+$('serial').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('go').click(); } });
+$('go').onclick=()=>{
+  const o=cleanName($('order').value), sn=cleanName($('serial').value);
+  if(!o){ toast('請先輸入或掃描工單'); $('order').focus(); return; }
+  if(!gasUrl()){ toast('請先到「設定」貼上 Apps Script 網址'); $('url').closest('details').open=true; return; }
+  order=o; serial=sn; orderActive=true; photos=[]; seq=0; renderThumb();
+  $('title').textContent='工單：'+order+(serial?'｜序號：'+serial:'');
+  show('s2'); openCam();
+};
+
+/* ---------- 2. 相機 ---------- */
+function stopCam(){
+  if(stream){ stream.getTracks().forEach(t=>{ t.onended=null; t.stop(); }); stream=null; }
+}
+async function openCam(){
+  stopCam();
+  let st=null;
+  const tries=[
+    {video:{facingMode:facing,width:{ideal:4096},height:{ideal:2160}},audio:false},
+    {video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080}},audio:false},
+    {video:{facingMode:facing},audio:false},
+    {video:true,audio:false}
+  ];
+  for(const c of tries){ try{ st=await navigator.mediaDevices.getUserMedia(c); break; }catch(e){} }
+  if(!st){ toast('無法開啟相機：請允許權限，並確認是 https 網址'); return; }
+  stream=st; v.srcObject=st;
+  const t=st.getVideoTracks()[0];
+  t.onended=()=>{ if(stream===st){ toast('相機中斷，重新啟動中…'); setTimeout(openCam,300); } };
+  try{ await v.play(); }catch(e){}
+}
+function camLive(){
+  const t=stream&&stream.getVideoTracks()[0];
+  return !!t && t.readyState==='live' && !t.muted && !v.paused && v.videoWidth>0 && v.readyState>=2;
+}
+async function ensureCam(){
+  if(!$('s2').classList.contains('on')) return;
+  if(camLive()) return;
+  const t=stream&&stream.getVideoTracks()[0];
+  if(t && t.readyState==='live'){ try{ await v.play(); }catch(e){} await new Promise(r=>setTimeout(r,300)); if(camLive()) return; }
+  await openCam();
+}
+v.addEventListener('pause',()=>{ if(stream && $('s2').classList.contains('on')) v.play().catch(()=>{}); });
+$('flip').onclick=()=>{ facing=facing==='environment'?'user':'environment'; openCam(); };
+
+function resetShoot(){ photos.forEach(p=>URL.revokeObjectURL(p.url)); photos=[]; stopCam(); }
+function checkLeave(){ return !(photos.some(p=>p.state==='err') && !confirm('有照片上傳失敗，確定離開？')); }
+
+/* 結束拍照：回到同一張工單，自動掃描下一個序號 */
+$('end').onclick=()=>{
+  if(!checkLeave()) return;
+  resetShoot(); serial='';
+  $('serial').value=''; $('order').value=order; $('order').readOnly=true;
+  $('h1s').textContent='📋 下一個序號（工單：'+order+'）';
+  $('finishS1').style.display='';
+  show('s1'); startScan('serial');
+};
+
+/* 結束工單：整張工單完成，回到最初畫面 */
+function finishOrder(){
+  if(!checkLeave()) return;
+  if(!confirm('確定結束工單 '+order+'？')) return;
+  resetShoot(); order=''; serial=''; orderActive=false;
+  $('order').value=''; $('serial').value=''; $('order').readOnly=false;
+  $('h1s').textContent='📋 工單／序號'; $('finishS1').style.display='none';
+  show('s1'); $('order').focus();
+}
+$('finish').onclick=finishOrder; $('finishS1').onclick=finishOrder;
+
+$('shot').onclick=async()=>{
+  if(!camLive()){ toast('相機重新啟動中，請稍候再拍'); await ensureCam(); return; }
+  const k=1; // 原畫質：不縮小
+  const c=document.createElement('canvas');
+  c.width=Math.round(v.videoWidth*k); c.height=Math.round(v.videoHeight*k);
+  c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+  const f=$('flash'); f.style.opacity=.8; setTimeout(()=>f.style.opacity=0,120);
+  c.toBlob(blob=>{
+    const d=new Date(), z=n=>String(n).padStart(2,'0');
+    const name=[order,serial].filter(Boolean).join('_')+'_'+d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'_'+z(d.getHours())+z(d.getMinutes())+z(d.getSeconds())+'_'+(++seq)+'.jpg';
+    const it={blob,url:URL.createObjectURL(blob),name,order,serial,state:'up',id:null,deleted:false};
+    photos.push(it); renderThumb(); upload(it);
+    c.width=c.height=0;
+  },'image/jpeg',0.95);
+};
+
+const queue=[]; let busy=false;
+function upload(it){ it.state='up'; renderThumb(); if($('s3').classList.contains('on')) renderReview(); queue.push(it); pump(); }
+async function pump(){
+  if(busy) return; busy=true;
+  while(queue.length){ const it=queue.shift(); if(it.deleted) continue; await doUpload(it); }
+  busy=false;
+}
+async function doUpload(it){
+  try{
+    const j=await api({action:'upload',order:it.order,serial:it.serial,name:it.name,data:await b64(it.blob)});
+    it.id=j.id; it.state='ok';
+    if(it.deleted){ api({action:'delete',id:it.id}).catch(()=>{}); }
+  }catch(e){ it.state='err'; toast('⚠️ 上傳失敗，可點縮圖重新上傳'); }
+  renderThumb(); if($('s3').classList.contains('on')) renderReview();
+}
+
+function renderThumb(){
+  const last=photos[photos.length-1];
+  $('thumb').style.backgroundImage = last?`url(${last.url})`:'none';
+  $('cnt').textContent=photos.length;
+  $('st').textContent = last?ICON[last.state]:'';
+}
+$('thumb').onclick=()=>{ if(!photos.length){ toast('尚未拍照'); return; } cur=photos.length-1; openReview(); };
+
+/* ---------- 3. 檢視（縮放） ---------- */
+let sc=1,tx=0,ty=0;
+function applyT(){ big.style.transform=`translate(${tx}px,${ty}px) scale(${sc})`; $('zp').textContent=Math.round(sc*100)+'%'; }
+function resetT(){ sc=1;tx=0;ty=0;applyT(); }
+function setScale(n){ sc=Math.min(8,Math.max(1,n)); if(sc===1){tx=0;ty=0;} applyT(); }
+
+function openReview(){ show('s3'); renderReview(); }
+function renderReview(){
+  const it=photos[cur]; if(!it) return;
+  big.src=it.url;
+  $('info').textContent=(cur+1)+' / '+photos.length+'  '+ICON[it.state];
+  $('prev').disabled=cur===0; $('next').disabled=cur===photos.length-1;
+  $('retry').style.display = it.state==='err'?'':'none';
+  if(!big.dataset.k || big.dataset.k!==it.url){ big.dataset.k=it.url; resetT(); }
+}
+$('back').onclick=()=>{ show('s2'); };
+$('prev').onclick=()=>{ if(cur>0){cur--;renderReview();} };
+$('next').onclick=()=>{ if(cur<photos.length-1){cur++;renderReview();} };
+$('zi').onclick=()=>setScale(sc*1.5);
+$('zo').onclick=()=>setScale(sc/1.5);
+$('retry').onclick=()=>{ const it=photos[cur]; if(it) upload(it); };
+
+$('del').onclick=async()=>{
+  const it=photos[cur]; if(!it) return;
+  if(!confirm('確定刪除這張照片？（雲端硬碟中的檔案也會移到垃圾桶）')) return;
+  it.deleted=true;
+  if(it.id){ api({action:'delete',id:it.id}).catch(()=>toast('雲端刪除失敗，請至雲端硬碟手動刪除')); }
+  photos.splice(cur,1); URL.revokeObjectURL(it.url); big.dataset.k='';
+  renderThumb();
+  if(!photos.length){ show('s2'); toast('已刪除'); return; }
+  if(cur>=photos.length) cur=photos.length-1;
+  renderReview(); toast('已刪除');
+};
+
+/* 手指縮放 / 拖曳 / 雙擊 */
+const stage=$('stage'), ptrs=new Map(); let d0=0,s0=1,lastTap=0;
+stage.addEventListener('pointerdown',e=>{
+  stage.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; d0=Math.hypot(a.x-b.x,a.y-b.y); s0=sc; }
+  if(ptrs.size===1){ const n=Date.now(); if(n-lastTap<300){ setScale(sc>1?1:2.5); } lastTap=n; }
+});
+stage.addEventListener('pointermove',e=>{
+  const p=ptrs.get(e.pointerId); if(!p) return;
+  const ox=p.x, oy=p.y; p.x=e.clientX; p.y=e.clientY;
+  if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; setScale(s0*Math.hypot(a.x-b.x,a.y-b.y)/d0); }
+  else if(sc>1){ tx+=p.x-ox; ty+=p.y-oy; applyT(); }
+});
+['pointerup','pointercancel'].forEach(t=>stage.addEventListener(t,e=>{ ptrs.delete(e.pointerId); }));
+stage.addEventListener('wheel',e=>{ e.preventDefault(); setScale(sc*(e.deltaY<0?1.15:1/1.15)); },{passive:false});
+
+/* ---------- 4. 掃描條碼 ---------- */
+let sStream=null, sTimer=null, h5=null, scanned=false;
+const sv=$('sv');
+function loadScript(src){ return new Promise((ok,no)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=no; document.head.appendChild(s); }); }
+let scanTarget='order';
+async function startScan(target){
+  scanTarget=target; scanned=false; show('s4');
+  if('BarcodeDetector' in window){
+    try{
+      sStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      sv.srcObject=sStream; sv.style.display='block'; $('reader').style.display='none';
+      const det=new BarcodeDetector();
+      sTimer=setInterval(async()=>{ try{ const r=await det.detect(sv); if(r.length) gotScan(r[0].rawValue); }catch(e){} },250);
+      return;
+    }catch(e){}
+  }
+  sv.style.display='none'; $('reader').style.display='block';
+  try{
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js');
+    h5=new Html5Qrcode('reader');
+    await h5.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:160}},t=>gotScan(t));
+  }catch(e){ toast('無法啟動掃描，請手動輸入'); closeScan(); }
+}
+$('scanOrder').onclick=()=>startScan('order');
+$('scanSerial').onclick=()=>startScan('serial');
+async function closeScan(){
+  clearInterval(sTimer);
+  if(sStream){ sStream.getTracks().forEach(t=>t.stop()); sStream=null; }
+  if(h5){ try{await h5.stop();}catch(e){} try{h5.clear();}catch(e){} h5=null; }
+  show('s1');
+}
+async function gotScan(t){
+  if(scanned) return; scanned=true;
+  $(scanTarget).value=t; toast('已讀取：'+t);
+  await closeScan();
+  if(scanTarget==='serial') $('go').click();      // 序號掃到後自動開始拍照
+  else $('serial').focus();
+}
+$('scanClose').onclick=closeScan;
+
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) setTimeout(ensureCam,300); });
+window.addEventListener('beforeunload',e=>{ if(busy||queue.length){ e.preventDefault(); e.returnValue=''; } });
+</script>
+</body>
+</html>
