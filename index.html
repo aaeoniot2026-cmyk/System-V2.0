@@ -15,7 +15,7 @@ button.g{background:var(--card);border:1px solid var(--bd);color:var(--tx)}
 button:disabled{opacity:.4}
 
 /* 1 輸入工單 */
-#s1{justify-content:center;align-items:center;padding:20px}
+#s1{justify-content:flex-start;align-items:center;padding:calc(10px + env(safe-area-inset-top,0)) 12px 12px}
 .box{width:100%;max-width:440px;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:20px}
 .box h1{font-size:22px;margin:0 0 14px}
 .row{display:flex;gap:8px}
@@ -38,7 +38,9 @@ summary{cursor:pointer}
 #st{position:absolute;bottom:-6px;left:-6px;font-size:16px}
 #shot{width:78px;height:78px;border-radius:50%;background:#fff;border:6px solid #888;padding:0}
 #shot:active{transform:scale(.93)}
-.sp{width:64px}
+.bar>.l,.bar>.r{flex:1;display:flex}
+.bar>.r{flex-direction:column;align-items:flex-end;gap:6px}
+.bar>.r button{padding:9px 12px;font-size:15px;min-width:92px}
 #flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .2s}
 
 /* 3 檢視 */
@@ -49,11 +51,22 @@ summary{cursor:pointer}
 .bot button{padding:10px 14px}
 #zp{min-width:56px;text-align:center}
 
-/* 4 掃描 */
-#s4{background:#000}
-#sv,#reader{flex:1;min-height:0;width:100%;object-fit:cover}
-.hint{text-align:center;padding:10px;color:var(--mu)}
+/* 掃描小視窗（在輸入畫面內） */
+#scanBox{display:none;position:relative;margin-top:12px;border-radius:12px;overflow:hidden;background:#000}
+#scanBox #sv,#scanBox #reader{width:100%;height:190px;object-fit:cover;display:block;overflow:hidden}
+#scanBox button{position:absolute;top:6px;right:6px;padding:6px 10px;font-size:14px;z-index:2}
 
+/* 上傳結果視窗 */
+#res{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:20;align-items:center;justify-content:center;padding:16px}
+.rbox{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px;width:100%;max-width:460px;max-height:85vh;display:flex;flex-direction:column}
+.rbox h2{font-size:19px;margin:0 0 6px}
+#rs{font-size:15px;line-height:1.6}
+#rl{overflow:auto;margin:10px 0;flex:1;min-height:0}
+.ri{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bd);font-size:13px}
+.ri img{width:44px;height:44px;object-fit:cover;border-radius:6px}
+.ri span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rb{display:flex;gap:8px;flex-wrap:wrap}
+.rb button{flex:1;padding:11px 10px;font-size:15px}
 #toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0));transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:8px 16px;border-radius:20px;font-size:14px;display:none;z-index:9;max-width:90%}
 </style>
 </head>
@@ -75,23 +88,22 @@ summary{cursor:pointer}
     </div>
     <button id="go">開始照相</button>
     <button class="g" id="finishS1" style="display:none;width:100%;margin-top:10px;color:var(--er)">結束工單（全部完成）</button>
-    <details>
-      <summary>⚙ 設定（Apps Script 網址）</summary>
-      <input id="url" placeholder="https://script.google.com/macros/s/.../exec">
-      <button class="g" id="saveUrl" style="margin-top:8px;padding:8px 14px;font-size:14px">儲存網址</button>
-    </details>
+    <div id="scanBox"><video id="sv" autoplay playsinline muted></video><div id="reader" style="display:none"></div><button class="g" id="scanClose">✕ 關閉</button></div>
   </div>
 </section>
 
 <!-- 2. 相機 -->
 <section id="s2">
-  <div class="top"><b id="title"></b><span><button class="g" id="flip">🔄</button> <button class="g" id="end">結束拍照</button></span></div>
+  <div class="top"><b id="title"></b><button class="g" id="flip">🔄 切換鏡頭</button></div>
   <video id="v" autoplay playsinline muted></video>
   <div id="flash"></div>
   <div class="bar">
-    <button id="thumb" aria-label="檢視照片"><span id="cnt">0</span><span id="st"></span></button>
+    <div class="l"><button id="thumb" aria-label="檢視照片"><span id="cnt">0</span><span id="st"></span></button></div>
     <button id="shot" aria-label="拍照"></button>
-    <button id="finish" style="background:var(--er);padding:10px 12px;font-size:15px;min-width:64px">結束<br>工單</button>
+    <div class="r">
+      <button class="g" id="nextSN">下一個序號</button>
+      <button id="finish" style="background:var(--er)">結束</button>
+    </div>
   </div>
 </section>
 
@@ -107,20 +119,17 @@ summary{cursor:pointer}
   </div>
 </section>
 
-<!-- 4. 掃描 -->
-<section id="s4">
-  <div class="top"><b>對準條碼／QR Code</b><button class="g" id="scanClose">✕ 關閉</button></div>
-  <video id="sv" autoplay playsinline muted></video>
-  <div id="reader" style="display:none"></div>
-  <div class="hint">掃到後會自動填入</div>
-</section>
-
+<div id="res"><div class="rbox">
+  <h2 id="rt"></h2><div id="rs"></div><div id="rl"></div>
+  <div class="rb"><button class="g" id="rBack">返回拍照</button><button class="g" id="rRetry" style="display:none">重新上傳失敗</button><button id="rOk"></button></div>
+</div></div>
 <div id="toast"></div>
 
 <script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyemkdI2il0i8lpFs-JuPy8y6JUa5VOiXvFucTTuNdOxAe-fnSd5PrYqR5BEbARzLAY/exec'; // Apps Script 網址（要更換時改這行）
 const $ = id => document.getElementById(id);
 const v=$('v'), big=$('big');
-let orderActive=false, order='', serial='', photos=[], stream=null, facing='environment', cur=0, seq=0;
+let resMode=null, orderActive=false, order='', serial='', photos=[], stream=null, facing='environment', cur=0, seq=0;
 
 /* ---------- 共用 ---------- */
 function show(id){
@@ -129,7 +138,7 @@ function show(id){
 }
 let tt; function toast(t){ const e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(tt); tt=setTimeout(()=>e.style.display='none',2500); }
 function cleanName(s){ return s.trim().replace(/[\\\/:*?"<>|]/g,'_'); }
-function gasUrl(){ return ($('url').value||'').trim(); }
+function gasUrl(){ return GAS_URL; }
 function b64(blob){ return new Promise((ok,no)=>{ const r=new FileReader(); r.onload=()=>ok(r.result.split(',')[1]); r.onerror=no; r.readAsDataURL(blob); }); }
 async function api(body){
   const r = await fetch(gasUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
@@ -137,16 +146,12 @@ async function api(body){
 }
 const ICON={up:'⏳',ok:'✅',err:'⚠️'};
 
-try{ $('url').value = localStorage.getItem('gasUrl')||''; serial = ''; }catch(e){}
-$('saveUrl').onclick=()=>{ try{ localStorage.setItem('gasUrl',gasUrl()); toast('✅ 網址已儲存'); }catch(e){ toast('無法儲存'); } };
-
 /* ---------- 1. 開始 ---------- */
 $('order').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); if($('order').value.trim()) $('serial').focus(); } });
 $('serial').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('go').click(); } });
 $('go').onclick=()=>{
   const o=cleanName($('order').value), sn=cleanName($('serial').value);
   if(!o){ toast('請先輸入或掃描工單'); $('order').focus(); return; }
-  if(!gasUrl()){ toast('請先到「設定」貼上 Apps Script 網址'); $('url').closest('details').open=true; return; }
   order=o; serial=sn; orderActive=true; photos=[]; seq=0; renderThumb();
   $('title').textContent='工單：'+order+(serial?'｜序號：'+serial:'');
   show('s2'); openCam();
@@ -187,28 +192,57 @@ v.addEventListener('pause',()=>{ if(stream && $('s2').classList.contains('on')) 
 $('flip').onclick=()=>{ facing=facing==='environment'?'user':'environment'; openCam(); };
 
 function resetShoot(){ photos.forEach(p=>URL.revokeObjectURL(p.url)); photos=[]; stopCam(); }
-function checkLeave(){ return !(photos.some(p=>p.state==='err') && !confirm('有照片上傳失敗，確定離開？')); }
 
-/* 結束拍照：回到同一張工單，自動掃描下一個序號 */
-$('end').onclick=()=>{
-  if(!checkLeave()) return;
+/* 下一個序號：回到同一張工單，自動掃描下一個序號 */
+function doNext(){
   resetShoot(); serial='';
   $('serial').value=''; $('order').value=order; $('order').readOnly=true;
   $('h1s').textContent='📋 下一個序號（工單：'+order+'）';
   $('finishS1').style.display='';
   show('s1'); startScan('serial');
-};
-
-/* 結束工單：整張工單完成，回到最初畫面 */
-function finishOrder(){
-  if(!checkLeave()) return;
-  if(!confirm('確定結束工單 '+order+'？')) return;
+}
+/* 結束：整張工單完成，回到最初畫面 */
+function doFinish(){
   resetShoot(); order=''; serial=''; orderActive=false;
   $('order').value=''; $('serial').value=''; $('order').readOnly=false;
   $('h1s').textContent='📋 工單／序號'; $('finishS1').style.display='none';
   show('s1'); $('order').focus();
 }
-$('finish').onclick=finishOrder; $('finishS1').onclick=finishOrder;
+$('finishS1').onclick=()=>{ if(confirm('確定結束工單 '+order+'？')) doFinish(); };
+
+/* ---------- 上傳結果視窗 ---------- */
+function openRes(m){ resMode=m; $('res').style.display='flex'; renderRes(); }
+function closeRes(){ resMode=null; $('res').style.display='none'; }
+function renderRes(){
+  if(!resMode) return;
+  const n=photos.length, up=photos.filter(p=>p.state==='up').length,
+        ok=photos.filter(p=>p.state==='ok').length, er=photos.filter(p=>p.state==='err').length;
+  $('rt').textContent = resMode==='next' ? '下一個序號 — 上傳結果' : '結束工單 — 上傳結果';
+  let msg = up ? '⏳ 上傳中，請稍候…' : er ? '⚠️ 有照片上傳失敗，請重新上傳' : n ? '🎉 全部上傳成功' : '本次沒有拍照';
+  $('rs').innerHTML = '工單：<b></b>'+(serial?'　序號：<b></b>':'')+'<br>共 '+n+' 張：✅ '+ok+' 成功　⏳ '+up+' 上傳中　⚠️ '+er+' 失敗<br><b>'+msg+'</b>';
+  const bs=$('rs').querySelectorAll('b'); bs[0].textContent=order; if(serial) bs[1].textContent=serial;
+  $('rl').innerHTML='';
+  photos.forEach(p=>{
+    const d=document.createElement('div'); d.className='ri';
+    const im=document.createElement('img'); im.src=p.url;
+    const nm=document.createElement('span'); nm.textContent=p.name+(p.state==='err'&&p.msg?'（'+p.msg+'）':'');
+    const ic=document.createElement('em'); ic.textContent=ICON[p.state]; ic.style.fontStyle='normal';
+    d.append(im,nm,ic); $('rl').appendChild(d);
+  });
+  $('rRetry').style.display = er?'':'none';
+  $('rOk').textContent = up ? '上傳中…' : (resMode==='next' ? '確認，下一個序號' : '確認，結束工單');
+  $('rOk').disabled = up>0;
+}
+$('rBack').onclick=closeRes;
+$('rRetry').onclick=()=>{ photos.filter(p=>p.state==='err').forEach(p=>upload(p)); };
+$('rOk').onclick=()=>{
+  const er=photos.filter(p=>p.state==='err').length;
+  if(er && !confirm('仍有 '+er+' 張上傳失敗，離開後無法重傳，確定繼續？')) return;
+  const m=resMode; closeRes();
+  if(m==='next') doNext(); else doFinish();
+};
+$('nextSN').onclick=()=>openRes('next');
+$('finish').onclick=()=>openRes('finish');
 
 $('shot').onclick=async()=>{
   if(!camLive()){ toast('相機重新啟動中，請稍候再拍'); await ensureCam(); return; }
@@ -238,11 +272,12 @@ async function doUpload(it){
     const j=await api({action:'upload',order:it.order,serial:it.serial,name:it.name,data:await b64(it.blob)});
     it.id=j.id; it.state='ok';
     if(it.deleted){ api({action:'delete',id:it.id}).catch(()=>{}); }
-  }catch(e){ it.state='err'; toast('⚠️ 上傳失敗，可點縮圖重新上傳'); }
+  }catch(e){ it.state='err'; it.msg=String(e&&e.message||e); toast('⚠️ 上傳失敗，請查看結果並重新上傳'); }
   renderThumb(); if($('s3').classList.contains('on')) renderReview();
 }
 
 function renderThumb(){
+  renderRes();
   const last=photos[photos.length-1];
   $('thumb').style.backgroundImage = last?`url(${last.url})`:'none';
   $('cnt').textContent=photos.length;
@@ -306,7 +341,8 @@ const sv=$('sv');
 function loadScript(src){ return new Promise((ok,no)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=no; document.head.appendChild(s); }); }
 let scanTarget='order';
 async function startScan(target){
-  scanTarget=target; scanned=false; show('s4');
+  if(sStream||h5) await closeScan();
+  scanTarget=target; scanned=false; $('scanBox').style.display='block';
   if('BarcodeDetector' in window){
     try{
       sStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
@@ -320,7 +356,7 @@ async function startScan(target){
   try{
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js');
     h5=new Html5Qrcode('reader');
-    await h5.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:160}},t=>gotScan(t));
+    await h5.start({facingMode:'environment'},{fps:10,qrbox:{width:200,height:110}},t=>gotScan(t));
   }catch(e){ toast('無法啟動掃描，請手動輸入'); closeScan(); }
 }
 $('scanOrder').onclick=()=>startScan('order');
@@ -329,7 +365,7 @@ async function closeScan(){
   clearInterval(sTimer);
   if(sStream){ sStream.getTracks().forEach(t=>t.stop()); sStream=null; }
   if(h5){ try{await h5.stop();}catch(e){} try{h5.clear();}catch(e){} h5=null; }
-  show('s1');
+  $('scanBox').style.display='none';
 }
 async function gotScan(t){
   if(scanned) return; scanned=true;
