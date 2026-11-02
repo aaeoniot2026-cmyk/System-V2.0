@@ -33,7 +33,9 @@ summary{cursor:pointer}
 .top button{padding:8px 12px;font-size:15px}
 #s2 .top{position:absolute;top:env(safe-area-inset-top,0);left:0;right:0;z-index:3;align-items:flex-start;background:linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,0))}
 #s2 .top b{white-space:pre-line;font-size:17px;line-height:1.4;text-shadow:0 1px 3px #000}
-#v{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+#vw{flex:1;min-height:0;position:relative;overflow:hidden;background:#000;touch-action:none}
+#v{display:block;width:100%;height:100%;object-fit:contain;transform-origin:center;will-change:transform}
+#zpill{display:none;position:absolute;right:12px;top:calc(env(safe-area-inset-top,0px) + 64px);z-index:3;padding:6px 12px;font-size:15px;background:rgba(0,0,0,.6);border:1px solid #fff}
 .bar{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;background:rgba(0,0,0,.6)}
 #thumb{position:relative;width:64px;height:64px;border-radius:10px;border:2px solid #fff;background:#222 center/cover no-repeat;padding:0;overflow:visible}
 #cnt{position:absolute;top:-8px;right:-8px;min-width:22px;height:22px;border-radius:11px;background:var(--ac);font-size:13px;line-height:22px;text-align:center}
@@ -101,7 +103,8 @@ summary{cursor:pointer}
 <!-- 2. 相機 -->
 <section id="s2">
   <div class="top"><b id="title"></b><button class="g" id="flip">🔄 切換鏡頭</button></div>
-  <video id="v" autoplay playsinline muted></video>
+  <div id="vw"><video id="v" autoplay playsinline muted></video></div>
+  <button id="zpill">還原</button>
   <div id="flash"></div>
   <div class="bar">
     <div class="l"><button id="thumb" aria-label="檢視照片"><span id="cnt">0</span><span id="st"></span></button></div>
@@ -152,6 +155,15 @@ async function api(body){
 }
 const ICON={up:'⏳',ok:'✅',err:'⚠️'};
 
+/* 連續自動對焦（手機支援才會生效，不支援會自動忽略） */
+const AF={focusMode:'continuous'};
+async function autoFocus(track){
+  try{
+    const c=track.getCapabilities?track.getCapabilities():{};
+    if(c.focusMode && c.focusMode.includes('continuous')) await track.applyConstraints({advanced:[AF]});
+  }catch(e){}
+}
+
 /* ---------- 1. 開始 ---------- */
 $('order').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); if($('order').value.trim()) startScan('serial'); } });
 $('serial').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('go').click(); } });
@@ -161,7 +173,8 @@ $('go').onclick=async()=>{
   order=o; serial=sn; orderActive=true; photos=[]; seq=0; renderThumb();
   $('title').textContent='工單：'+order+'\n序號：'+(serial||'（未填）');
   await closeScan();
-  show('s2'); openCam();
+  resetZoom(); show('s2'); openCam();
+  if(!window._zhint){ window._zhint=1; toast('雙指縮放或雙擊可放大，放大後拖曳選擇拍攝區域'); }
 };
 
 /* ---------- 2. 相機 ---------- */
@@ -172,15 +185,16 @@ async function openCam(){
   stopCam();
   let st=null;
   const tries=[
-    {video:{facingMode:facing,width:{ideal:4096},height:{ideal:2160}},audio:false},
+    {video:{facingMode:facing,width:{ideal:4096},height:{ideal:2160},advanced:[AF]},audio:false},
     {video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080}},audio:false},
     {video:{facingMode:facing},audio:false},
     {video:true,audio:false}
   ];
   for(const c of tries){ try{ st=await navigator.mediaDevices.getUserMedia(c); break; }catch(e){} }
   if(!st){ toast('無法開啟相機：請允許權限，並確認是 https 網址'); return; }
-  stream=st; v.srcObject=st;
+  stream=st; v.srcObject=st; resetZoom();
   const t=st.getVideoTracks()[0];
+  autoFocus(t);
   t.onended=()=>{ if(stream===st){ toast('相機中斷，重新啟動中…'); setTimeout(openCam,300); } };
   try{ await v.play(); }catch(e){}
 }
@@ -253,10 +267,14 @@ $('finish').onclick=()=>openRes('finish');
 
 $('shot').onclick=async()=>{
   if(!camLive()){ toast('相機重新啟動中，請稍候再拍'); await ensureCam(); return; }
-  const k=1; // 原畫質：不縮小
+  // 取得目前畫面上看到的區域（對應到相機原始像素）
+  const dm=dims(), cw=dm.dw*Z, ch=dm.dh*Z;
+  const cx0=dm.W/2+PX-cw/2, cy0=dm.H/2+PY-ch/2;
+  const x0=Math.max(0,cx0), y0=Math.max(0,cy0), x1=Math.min(dm.W,cx0+cw), y1=Math.min(dm.H,cy0+ch);
+  const sx=(x0-cx0)/cw*dm.w, sy=(y0-cy0)/ch*dm.h, sw=(x1-x0)/cw*dm.w, sh=(y1-y0)/ch*dm.h;
   const c=document.createElement('canvas');
-  c.width=Math.round(v.videoWidth*k); c.height=Math.round(v.videoHeight*k);
-  c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+  c.width=Math.max(1,Math.round(sw)); c.height=Math.max(1,Math.round(sh));
+  c.getContext('2d').drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
   const f=$('flash'); f.style.opacity=.8; setTimeout(()=>f.style.opacity=0,120);
   c.toBlob(blob=>{
     const d=new Date(), z=n=>String(n).padStart(2,'0');
@@ -266,6 +284,51 @@ $('shot').onclick=async()=>{
     c.width=c.height=0;
   },'image/jpeg',0.95);
 };
+
+/* ---------- 拍照區放大（可雙指縮放、拖曳選區） ---------- */
+const vw=$('vw'); let Z=1, PX=0, PY=0;
+function dims(){
+  const W=vw.clientWidth, H=vw.clientHeight, w=v.videoWidth||W, h=v.videoHeight||H, f=Math.min(W/w,H/h);
+  return {W,H,w,h,dw:w*f,dh:h*f};
+}
+function applyZ(){
+  const d=dims(), mx=Math.max(0,(d.dw*Z-d.W)/2), my=Math.max(0,(d.dh*Z-d.H)/2);
+  PX=Math.min(mx,Math.max(-mx,PX)); PY=Math.min(my,Math.max(-my,PY));
+  v.style.transform='translate('+PX+'px,'+PY+'px) scale('+Z+')';
+  const pl=$('zpill');
+  if(Z>1.01){ pl.style.display='block'; pl.textContent='🔍 ×'+Z.toFixed(1)+'　點此還原'; } else pl.style.display='none';
+}
+function resetZoom(){ Z=1; PX=0; PY=0; applyZ(); }
+function zoomAt(nz,fx,fy){
+  nz=Math.min(6,Math.max(1,nz)); const r=nz/Z;
+  PX=fx-(fx-PX)*r; PY=fy-(fy-PY)*r; Z=nz;
+  if(Z<=1){ Z=1; PX=0; PY=0; }
+  applyZ();
+}
+function rel(e){ const r=vw.getBoundingClientRect(); return {x:e.clientX-r.left-r.width/2, y:e.clientY-r.top-r.height/2}; }
+const zp=new Map(); let zd0=0, zLast=null, zTap=0;
+vw.addEventListener('pointerdown',e=>{
+  vw.setPointerCapture(e.pointerId); zp.set(e.pointerId,rel(e));
+  if(zp.size===2){ const [a,b]=[...zp.values()]; zd0=Math.hypot(a.x-b.x,a.y-b.y)||1; zLast={x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
+  if(zp.size===1){ const n=Date.now(); if(n-zTap<300){ if(Z>1) resetZoom(); else { const q=rel(e); zoomAt(2.5,q.x,q.y); } } zTap=n; }
+});
+vw.addEventListener('pointermove',e=>{
+  const o=zp.get(e.pointerId); if(!o) return;
+  const n=rel(e);
+  if(zp.size===2){
+    zp.set(e.pointerId,n);
+    const [a,b]=[...zp.values()], mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2}, dist=Math.hypot(a.x-b.x,a.y-b.y)||1;
+    zoomAt(Z*dist/zd0,mid.x,mid.y); zd0=dist;
+    PX+=mid.x-zLast.x; PY+=mid.y-zLast.y; zLast=mid; applyZ();
+  }else{
+    zp.set(e.pointerId,n);
+    if(Z>1){ PX+=n.x-o.x; PY+=n.y-o.y; applyZ(); }
+  }
+});
+['pointerup','pointercancel'].forEach(t=>vw.addEventListener(t,e=>{ zp.delete(e.pointerId); }));
+vw.addEventListener('wheel',e=>{ e.preventDefault(); const q=rel(e); zoomAt(Z*(e.deltaY<0?1.15:1/1.15),q.x,q.y); },{passive:false});
+$('zpill').onclick=resetZoom;
+window.addEventListener('resize',applyZ);
 
 const queue=[]; let busy=false;
 function upload(it){ it.state='up'; renderThumb(); if($('s3').classList.contains('on')) renderReview(); queue.push(it); pump(); }
@@ -356,7 +419,8 @@ async function startScan(target){
   sbox.style.display='block';
   if('BarcodeDetector' in window){
     try{
-      const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720},advanced:[AF]},audio:false});
+      await autoFocus(st.getVideoTracks()[0]);
       if(my!==scanId){ st.getTracks().forEach(t=>t.stop()); return; }
       sStream=st; sv.srcObject=st; sv.style.display='block'; $('reader').style.display='none';
       const det=new BarcodeDetector();
@@ -369,7 +433,7 @@ async function startScan(target){
     if(!window.Html5Qrcode) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js');
     if(my!==scanId) return;
     const q=new Html5Qrcode('reader'); h5=q;
-    await q.start({facingMode:'environment'},{fps:10},t=>gotScan(t));
+    await q.start({facingMode:'environment'},{fps:10,videoConstraints:{facingMode:'environment',advanced:[AF]}},t=>gotScan(t));
     if(my!==scanId){ closeScan(); }
   }catch(e){ if(my===scanId){ toast('無法啟動掃描，請點框手動輸入'); await closeScan(); } }
 }
