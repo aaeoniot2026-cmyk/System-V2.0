@@ -3,25 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>工單拍照上傳</title>
+<title>系統組裝廠 · 照片自動上傳</title>
 <style>
-:root{--bg:#111418;--card:#1e232a;--tx:#f2f4f7;--mu:#9aa4b2;--ac:#3b82f6;--ok:#22c55e;--er:#ef4444;--wn:#f59e0b;--bd:#323a45}
+:root{--bg:#0a1020;--card:#111a2e;--tx:#e8edf6;--mu:#8b98b0;--ac:#2563eb;--ok:#16a34a;--er:#dc2626;--wn:#d97706;--bd:#25314a;--c-order:#3b82f6;--c-serial:#14b8a6}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,"Noto Sans TC","PingFang TC",sans-serif;overflow:hidden}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font-family:Inter,"Segoe UI",system-ui,-apple-system,"Noto Sans TC","PingFang TC",sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
 section{display:none;position:fixed;inset:0;flex-direction:column;padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}
 section.on{display:flex}
-button{font:inherit;border:0;border-radius:12px;padding:12px 18px;background:var(--ac);color:#fff;cursor:pointer}
+button{font:inherit;font-weight:600;letter-spacing:.2px;border:0;border-radius:10px;padding:12px 18px;background:var(--ac);color:#fff;cursor:pointer;transition:filter .15s,transform .05s}
+button:active{transform:scale(.98);filter:brightness(.92)}
 button.g{background:var(--card);border:1px solid var(--bd);color:var(--tx)}
 button:disabled{opacity:.4}
 
 /* 1 輸入工單 */
 #s1{justify-content:flex-start;align-items:center;padding:calc(10px + env(safe-area-inset-top,0)) 12px 12px}
-.box{width:100%;max-width:440px;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:20px}
-.box h1{font-size:22px;margin:0 0 14px}
+.box{width:100%;max-width:440px;background:linear-gradient(180deg,#141f38,var(--card));border:1px solid var(--bd);border-radius:14px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.box h1{font-size:24px;font-weight:700;letter-spacing:2px;text-align:center;margin:0 0 4px}
+.sub{font-size:15px;letter-spacing:3px;text-align:center;color:var(--mu);margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--bd)}
+.lb{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--tx);margin-top:4px}
+.lb i{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:var(--c);color:#fff;font-size:12px;font-weight:700}
+.lb small{font-weight:400;font-size:12px;color:var(--mu)}
+.ht{font-size:12px;color:var(--mu);margin:0 0 12px;line-height:1.5}
+.fld.order,.lb.order,.cam.order{--c:var(--c-order)}
+.fld.serial,.lb.serial,.cam.serial{--c:var(--c-serial)}
+.fld{padding:3px;border-radius:13px;background:var(--c);transition:box-shadow .15s}
+.fld:focus-within{box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 30%,transparent)}
+button.cam{width:64px;flex:none;padding:0;display:flex;align-items:center;justify-content:center;background:var(--bg);border:2px solid var(--c);color:var(--c)}
+.cam svg{width:26px;height:26px}
 .row{display:flex;gap:8px}
 input[readonly]{opacity:.65}
-input{width:100%;height:76px;font-size:22px;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
-#go{width:100%;margin-top:14px;font-size:20px;padding:14px;background:var(--ok)}
+input{width:100%;height:76px;font-size:22px;font-weight:600;letter-spacing:.5px;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);outline:none}
+input[type=checkbox]{accent-color:var(--ac)}
+#go{width:100%;margin-top:14px;font-size:18px;font-weight:700;letter-spacing:1px;padding:15px;background:linear-gradient(180deg,#2f6df0,#1d4fd8);box-shadow:0 4px 14px rgba(37,99,235,.4)}
 details{margin-top:14px;color:var(--mu);font-size:14px}
 details input{font-size:14px;margin-top:8px}
 summary{cursor:pointer}
@@ -59,7 +72,7 @@ summary{cursor:pointer}
 /* 輸入框內直接掃描 */
 .fld{position:relative;flex:1;min-width:0}
 .fld input{display:block}
-#scanBox{display:none;position:absolute;inset:0;border-radius:10px;overflow:hidden;background:#000;cursor:pointer;z-index:2}
+#scanBox{display:none;position:absolute;inset:3px;border-radius:10px;overflow:hidden;background:#000;cursor:pointer;z-index:2}
 #scanBox #sv,#scanBox #reader{width:100%;height:100%;object-fit:cover;display:block;overflow:hidden}
 #scanBox #reader video{width:100%!important;height:100%!important;object-fit:cover}
 #ocrBox{display:none;position:absolute;left:var(--fl,4%);width:var(--fw,92%);top:var(--ft,14%);height:var(--fh,72%);border:3px solid #ef4444;border-radius:6px;pointer-events:none;z-index:1;box-sizing:border-box}
@@ -84,17 +97,18 @@ summary{cursor:pointer}
 <!-- 1. 輸入工單/序號 -->
 <section id="s1" class="on">
   <div class="box">
-    <h1 id="h1s">📋 工單／序號</h1>
-    <div style="font-size:13px;color:var(--mu);margin-bottom:10px">輸入框會直接開啟掃描，<b>點一下框</b>即可改為手動輸入；📷 可重新掃描</div>
-    <label style="font-size:14px;color:var(--mu)">工單（必填）→ 第一層資料夾</label>
-    <div class="row" style="margin:4px 0 12px">
-      <div class="fld"><input id="order" placeholder="掃描或輸入工單" autocomplete="off" autocapitalize="characters" enterkeyhint="next"></div>
-      <button class="g" id="scanOrder">📷</button>
+    <h1 id="h1s">系統組裝廠</h1>
+    <div class="sub">照片自動上傳</div>
+    <div class="ht" id="hint1">輸入框會直接開啟掃描，<b>點一下框</b>即可改為手動輸入；相機圖示可重新掃描。</div>
+    <div class="lb order"><i>1</i>工單 <small>Work Order · 必填 → 第一層資料夾</small></div>
+    <div class="row" style="margin:6px 0 14px">
+      <div class="fld order"><input id="order" placeholder="掃描或輸入工單" autocomplete="off" autocapitalize="characters" enterkeyhint="next"></div>
+      <button class="g cam order" id="scanOrder" aria-label="掃描工單"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
     </div>
-    <label style="font-size:14px;color:var(--mu)">序號（選填）→ 第二層資料夾，不填則直接存在工單資料夾</label>
-    <div class="row" style="margin-top:4px">
-      <div class="fld"><input id="serial" placeholder="掃描或輸入序號（可不填）" autocomplete="off" autocapitalize="characters" enterkeyhint="go"></div>
-      <button class="g" id="scanSerial">📷</button>
+    <div class="lb serial"><i>2</i>序號 <small>Serial No. · 選填 → 第二層資料夾</small></div>
+    <div class="row" style="margin-top:6px">
+      <div class="fld serial"><input id="serial" placeholder="掃描或輸入序號" autocomplete="off" autocapitalize="characters" enterkeyhint="go"></div>
+      <button class="g cam serial" id="scanSerial" aria-label="掃描序號"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
     </div>
     <div id="pend" style="display:none;margin-top:14px;height:76px;padding:0 12px;box-sizing:border-box;border-radius:10px;border:1px solid var(--ok);background:rgba(34,197,94,.12);color:var(--tx);font-weight:600;white-space:nowrap;overflow:hidden;cursor:pointer;align-items:center;justify-content:center;text-align:center"></div>
     <button id="go">開始照相</button>
@@ -103,7 +117,7 @@ summary{cursor:pointer}
       <summary>⚙️ 設定</summary>
       <label style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--tx);cursor:pointer">
         <input type="checkbox" id="ocrOn" autocomplete="off" style="width:22px;height:22px;flex:none;margin:0">
-        <span>啟用文字 OCR（只擷取 Job: 後、第一個 - 之前的工單）</span>
+        <span>啟用文字 OCR（擷取 Job: 後、- 之前的工單；或 TFF／RMA／RS／R／C／S ＋ 7 位數字）</span>
       </label>
       <div id="frmSet" style="margin-top:10px;display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:14px">
         <span>紅框寬</span><input type="range" id="fW" min="30" max="100" step="1" style="height:auto;padding:0;margin:0"><span id="fWv"></span>
@@ -170,6 +184,7 @@ async function api(body){
   const r = await fetch(gasUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
   const j = await r.json(); if(!j.ok) throw new Error(j.error||'失敗'); return j;
 }
+const HINT1=$('hint1').innerHTML;
 const ICON={up:'⏳',ok:'✅',err:'⚠️'};
 
 /* 拍照快門聲（WebAudio 合成，不需音檔；需在使用者點擊後才能發聲） */
@@ -256,7 +271,7 @@ function resetShoot(){ photos.forEach(p=>URL.revokeObjectURL(p.url)); photos=[];
 function doNext(){
   resetShoot(); serial='';
   $('serial').value=''; $('order').value=order; $('order').readOnly=true;
-  $('h1s').textContent='📋 下一個序號（工單：'+order+'）';
+  $('hint1').innerHTML='<b style="color:var(--tx)">下一個序號</b>（工單：'+order+'）';
   $('finishS1').style.display='';
   show('s1'); startScan('serial');
 }
@@ -264,7 +279,7 @@ function doNext(){
 function doFinish(){
   resetShoot(); order=''; serial=''; orderActive=false;
   $('order').value=''; $('serial').value=''; $('order').readOnly=false;
-  $('h1s').textContent='📋 工單／序號'; $('finishS1').style.display='none';
+  $('hint1').innerHTML=HINT1; $('finishS1').style.display='none';
   show('s1'); startScan('order');
 }
 $('finishS1').onclick=()=>{ if(confirm('確定結束工單 '+order+'？')) doFinish(); };
@@ -520,16 +535,21 @@ const OCR_MAX_TRIES=20, OCR_GAP=700;      // 每次掃描最多送 20 次、間�
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function parseJob(txt){
   const t=(txt||'').replace(/[：﹕]/g,':').replace(/[–—－﹣‐‑]/g,'-');
-  // 標籤容許 OCR 誤判：Job / JOB / J0b / Jo8 / Jab / J0B …；冒號可誤判成 ; . , | !，也可能被漏掉
+  // 規則 1：Job : XXXX-（標籤容許 OCR 誤判：Job / JOB / J0b / Jo8 / Jab …）
   const m=t.match(/J\s?[oO0aAeEuU@8]\s?[bB68hH]\s*[:;.,|!]?\s*([A-Za-z0-9]+)\s*-/);
-  if(!m) return '';
-  let id=m[1].toUpperCase();
-  const k=id.search(/[0-9]/);                                   // 第一個數字之後應全為數字：修正 O→0、I/L→1
-  if(k>0){
-    const fixed=id.slice(0,k)+id.slice(k).replace(/O/g,'0').replace(/[IL]/g,'1');
-    if(/^[A-Z]+[0-9]+$/.test(fixed)) id=fixed;
+  if(m){
+    let id=m[1].toUpperCase();
+    const k=id.search(/[0-9]/);                                 // 第一個數字之後應全為數字：修正 O→0、I/L→1
+    if(k>0){
+      const fixed=id.slice(0,k)+id.slice(k).replace(/O/g,'0').replace(/[IL]/g,'1');
+      if(/^[A-Z]+[0-9]+$/.test(fixed)) id=fixed;
+    }
+    if(id.length>=5 && /\d/.test(id)) return id;               // 過短或無數字視為誤判
   }
-  return (id.length>=5 && /\d/.test(id)) ? id : '';            // 過短或無數字視為誤判
+  // 規則 2：TFF / RMA / RS / R / C / S 開頭 + 連續 7 個數字（前面不可緊接其他英數字，後面不可再接數字）
+  const a=t.match(/(?:^|[^A-Za-z0-9])(TFF|RMA|RS|R|C|S)\s?([0-9]{7})(?![0-9])/i);
+  if(a) return (a[1]+a[2]).toUpperCase();
+  return '';
 }
 let ocrMetric=null;
 function ocrFrame(){                                           // 只擷取紅框範圍 → JPEG base64（影像小、辨識快）
