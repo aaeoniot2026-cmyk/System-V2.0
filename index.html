@@ -31,6 +31,8 @@ summary{cursor:pointer}
 .top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;background:rgba(0,0,0,.6)}
 .top b{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .top button{padding:8px 12px;font-size:15px}
+#s2 .top{position:absolute;top:env(safe-area-inset-top,0);left:0;right:0;z-index:3;align-items:flex-start;background:linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,0))}
+#s2 .top b{white-space:pre-line;font-size:17px;line-height:1.4;text-shadow:0 1px 3px #000}
 #v{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
 .bar{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;background:rgba(0,0,0,.6)}
 #thumb{position:relative;width:64px;height:64px;border-radius:10px;border:2px solid #fff;background:#222 center/cover no-repeat;padding:0;overflow:visible}
@@ -51,10 +53,13 @@ summary{cursor:pointer}
 .bot button{padding:10px 14px}
 #zp{min-width:56px;text-align:center}
 
-/* 掃描小視窗（在輸入畫面內） */
-#scanBox{display:none;position:relative;margin-top:12px;border-radius:12px;overflow:hidden;background:#000}
-#scanBox #sv,#scanBox #reader{width:100%;height:190px;object-fit:cover;display:block;overflow:hidden}
-#scanBox button{position:absolute;top:6px;right:6px;padding:6px 10px;font-size:14px;z-index:2}
+/* 輸入框內直接掃描 */
+.fld{position:relative;flex:1;min-width:0}
+.fld input{display:block}
+#scanBox{display:none;position:absolute;inset:0;border-radius:10px;overflow:hidden;background:#000;cursor:pointer;z-index:2}
+#scanBox #sv,#scanBox #reader{width:100%;height:100%;object-fit:cover;display:block;overflow:hidden}
+#scanBox #reader video{width:100%!important;height:100%!important;object-fit:cover}
+#scanHint{position:absolute;left:6px;bottom:4px;font-size:12px;color:#fff;background:rgba(0,0,0,.55);padding:1px 8px;border-radius:8px;pointer-events:none}
 
 /* 上傳結果視窗 */
 #res{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:20;align-items:center;justify-content:center;padding:16px}
@@ -76,19 +81,20 @@ summary{cursor:pointer}
 <section id="s1" class="on">
   <div class="box">
     <h1 id="h1s">📋 工單／序號</h1>
+    <div style="font-size:13px;color:var(--mu);margin-bottom:10px">輸入框會直接開啟掃描，<b>點一下框</b>即可改為手動輸入；📷 可重新掃描</div>
     <label style="font-size:14px;color:var(--mu)">工單（必填）→ 第一層資料夾</label>
     <div class="row" style="margin:4px 0 12px">
-      <input id="order" placeholder="掃描或輸入工單" autocomplete="off" autocapitalize="characters" enterkeyhint="next">
+      <div class="fld"><input id="order" placeholder="掃描或輸入工單" autocomplete="off" autocapitalize="characters" enterkeyhint="next"></div>
       <button class="g" id="scanOrder">📷</button>
     </div>
     <label style="font-size:14px;color:var(--mu)">序號（選填）→ 第二層資料夾，不填則直接存在工單資料夾</label>
     <div class="row" style="margin-top:4px">
-      <input id="serial" placeholder="掃描或輸入序號（可不填）" autocomplete="off" autocapitalize="characters" enterkeyhint="go">
+      <div class="fld"><input id="serial" placeholder="掃描或輸入序號（可不填）" autocomplete="off" autocapitalize="characters" enterkeyhint="go"></div>
       <button class="g" id="scanSerial">📷</button>
     </div>
     <button id="go">開始照相</button>
     <button class="g" id="finishS1" style="display:none;width:100%;margin-top:10px;color:var(--er)">結束工單（全部完成）</button>
-    <div id="scanBox"><video id="sv" autoplay playsinline muted></video><div id="reader" style="display:none"></div><button class="g" id="scanClose">✕ 關閉</button></div>
+    <div id="scanBox"><video id="sv" autoplay playsinline muted></video><div id="reader" style="display:none"></div><div id="scanHint">掃描中…點此手動輸入</div></div>
   </div>
 </section>
 
@@ -147,13 +153,14 @@ async function api(body){
 const ICON={up:'⏳',ok:'✅',err:'⚠️'};
 
 /* ---------- 1. 開始 ---------- */
-$('order').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); if($('order').value.trim()) $('serial').focus(); } });
+$('order').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); if($('order').value.trim()) startScan('serial'); } });
 $('serial').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('go').click(); } });
-$('go').onclick=()=>{
+$('go').onclick=async()=>{
   const o=cleanName($('order').value), sn=cleanName($('serial').value);
   if(!o){ toast('請先輸入或掃描工單'); $('order').focus(); return; }
   order=o; serial=sn; orderActive=true; photos=[]; seq=0; renderThumb();
-  $('title').textContent='工單：'+order+(serial?'｜序號：'+serial:'');
+  $('title').textContent='工單：'+order+'\n序號：'+(serial||'（未填）');
+  await closeScan();
   show('s2'); openCam();
 };
 
@@ -206,7 +213,7 @@ function doFinish(){
   resetShoot(); order=''; serial=''; orderActive=false;
   $('order').value=''; $('serial').value=''; $('order').readOnly=false;
   $('h1s').textContent='📋 工單／序號'; $('finishS1').style.display='none';
-  show('s1'); $('order').focus();
+  show('s1'); startScan('order');
 }
 $('finishS1').onclick=()=>{ if(confirm('確定結束工單 '+order+'？')) doFinish(); };
 
@@ -335,18 +342,23 @@ stage.addEventListener('pointermove',e=>{
 ['pointerup','pointercancel'].forEach(t=>stage.addEventListener(t,e=>{ ptrs.delete(e.pointerId); }));
 stage.addEventListener('wheel',e=>{ e.preventDefault(); setScale(sc*(e.deltaY<0?1.15:1/1.15)); },{passive:false});
 
-/* ---------- 4. 掃描條碼 ---------- */
-let sStream=null, sTimer=null, h5=null, scanned=false;
-const sv=$('sv');
+/* ---------- 4. 掃描（直接在輸入框內進行） ---------- */
+let sStream=null, sTimer=null, h5=null, scanned=false, scanTarget='order', scanId=0;
+const sv=$('sv'), sbox=$('scanBox');
 function loadScript(src){ return new Promise((ok,no)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=no; document.head.appendChild(s); }); }
-let scanTarget='order';
+
 async function startScan(target){
-  if(sStream||h5) await closeScan();
-  scanTarget=target; scanned=false; $('scanBox').style.display='block';
+  if(target==='order' && $('order').readOnly) return;
+  await closeScan();
+  const my=++scanId;
+  scanTarget=target; scanned=false;
+  $(target).parentElement.appendChild(sbox);     // 掃描畫面疊在該輸入框上，大小與框相同
+  sbox.style.display='block';
   if('BarcodeDetector' in window){
     try{
-      sStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-      sv.srcObject=sStream; sv.style.display='block'; $('reader').style.display='none';
+      const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      if(my!==scanId){ st.getTracks().forEach(t=>t.stop()); return; }
+      sStream=st; sv.srcObject=st; sv.style.display='block'; $('reader').style.display='none';
       const det=new BarcodeDetector();
       sTimer=setInterval(async()=>{ try{ const r=await det.detect(sv); if(r.length) gotScan(r[0].rawValue); }catch(e){} },250);
       return;
@@ -354,29 +366,42 @@ async function startScan(target){
   }
   sv.style.display='none'; $('reader').style.display='block';
   try{
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js');
-    h5=new Html5Qrcode('reader');
-    await h5.start({facingMode:'environment'},{fps:10,qrbox:{width:200,height:110}},t=>gotScan(t));
-  }catch(e){ toast('無法啟動掃描，請手動輸入'); closeScan(); }
+    if(!window.Html5Qrcode) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js');
+    if(my!==scanId) return;
+    const q=new Html5Qrcode('reader'); h5=q;
+    await q.start({facingMode:'environment'},{fps:10},t=>gotScan(t));
+    if(my!==scanId){ closeScan(); }
+  }catch(e){ if(my===scanId){ toast('無法啟動掃描，請點框手動輸入'); await closeScan(); } }
 }
-$('scanOrder').onclick=()=>startScan('order');
-$('scanSerial').onclick=()=>startScan('serial');
 async function closeScan(){
+  scanId++;
   clearInterval(sTimer);
   if(sStream){ sStream.getTracks().forEach(t=>t.stop()); sStream=null; }
-  if(h5){ try{await h5.stop();}catch(e){} try{h5.clear();}catch(e){} h5=null; }
-  $('scanBox').style.display='none';
+  if(h5){ const q=h5; h5=null; try{await q.stop();}catch(e){} try{q.clear();}catch(e){} }
+  sbox.style.display='none';
 }
 async function gotScan(t){
   if(scanned) return; scanned=true;
-  $(scanTarget).value=t; toast('已讀取：'+t);
+  const tg=scanTarget; $(tg).value=t; toast('已讀取：'+t);
   await closeScan();
-  if(scanTarget==='serial') $('go').click();      // 序號掃到後自動開始拍照
-  else $('serial').focus();
+  if(tg==='serial') $('go').click();          // 序號掃到後自動開始拍照
+  else startScan('serial');                    // 工單掃到後，序號框接著開始掃描
 }
-$('scanClose').onclick=closeScan;
+sbox.onclick=async()=>{ const t=scanTarget; await closeScan(); $(t).focus(); };   // 點框 → 改手動輸入
+$('scanOrder').onclick=()=>startScan('order');
+$('scanSerial').onclick=()=>startScan('serial');
 
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden) setTimeout(ensureCam,300); });
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) return;
+  setTimeout(()=>{
+    ensureCam();
+    if($('s1').classList.contains('on') && sbox.style.display==='block'){
+      const t=sStream&&sStream.getVideoTracks()[0];
+      if(!t||t.readyState!=='live') startScan(scanTarget);
+    }
+  },300);
+});
+startScan('order');   // 一開啟就在工單框內掃描
 window.addEventListener('beforeunload',e=>{ if(busy||queue.length){ e.preventDefault(); e.returnValue=''; } });
 </script>
 </body>
