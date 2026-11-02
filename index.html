@@ -49,7 +49,8 @@ summary{cursor:pointer}
 
 /* 3 檢視 */
 #s3{background:#000}
-#stage{flex:1;min-height:0;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center}
+#pinfo{position:absolute;left:8px;top:8px;z-index:2;padding:3px 8px;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;line-height:1.4;pointer-events:none;white-space:nowrap}
+#stage{position:relative;flex:1;min-height:0;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center}
 #big{max-width:100%;max-height:100%;transform-origin:center;user-select:none;-webkit-user-drag:none}
 .bot{display:flex;justify-content:center;align-items:center;gap:8px;padding:10px;background:rgba(0,0,0,.6)}
 .bot button{padding:10px 14px}
@@ -61,6 +62,7 @@ summary{cursor:pointer}
 #scanBox{display:none;position:absolute;inset:0;border-radius:10px;overflow:hidden;background:#000;cursor:pointer;z-index:2}
 #scanBox #sv,#scanBox #reader{width:100%;height:100%;object-fit:cover;display:block;overflow:hidden}
 #scanBox #reader video{width:100%!important;height:100%!important;object-fit:cover}
+#ocrBox{display:none;position:absolute;left:var(--fl,4%);width:var(--fw,92%);top:var(--ft,14%);height:var(--fh,72%);border:3px solid #ef4444;border-radius:6px;pointer-events:none;z-index:1;box-sizing:border-box}
 #scanHint{position:absolute;left:6px;bottom:4px;font-size:12px;color:#fff;background:rgba(0,0,0,.55);padding:1px 8px;border-radius:8px;pointer-events:none}
 
 /* 上傳結果視窗 */
@@ -94,9 +96,24 @@ summary{cursor:pointer}
       <div class="fld"><input id="serial" placeholder="掃描或輸入序號（可不填）" autocomplete="off" autocapitalize="characters" enterkeyhint="go"></div>
       <button class="g" id="scanSerial">📷</button>
     </div>
+    <div id="pend" style="display:none;margin-top:14px;height:76px;padding:0 12px;box-sizing:border-box;border-radius:10px;border:1px solid var(--ok);background:rgba(34,197,94,.12);color:var(--tx);font-weight:600;white-space:nowrap;overflow:hidden;cursor:pointer;align-items:center;justify-content:center;text-align:center"></div>
     <button id="go">開始照相</button>
     <button class="g" id="finishS1" style="display:none;width:100%;margin-top:10px;color:var(--er)">結束工單（全部完成）</button>
-    <div id="scanBox"><video id="sv" autoplay playsinline muted></video><div id="reader" style="display:none"></div><div id="scanHint">掃描中…點此手動輸入</div></div>
+    <details id="setBox" open>
+      <summary>⚙️ 設定</summary>
+      <label style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:15px;color:var(--tx);cursor:pointer">
+        <input type="checkbox" id="ocrOn" autocomplete="off" style="width:22px;height:22px;flex:none;margin:0">
+        <span>啟用文字 OCR（只擷取 Job: 後、第一個 - 之前的工單）</span>
+      </label>
+      <div id="frmSet" style="margin-top:10px;display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:14px">
+        <span>紅框寬</span><input type="range" id="fW" min="30" max="100" step="1" style="height:auto;padding:0;margin:0"><span id="fWv"></span>
+        <span>紅框高</span><input type="range" id="fH" min="20" max="100" step="1" style="height:auto;padding:0;margin:0"><span id="fHv"></span>
+        <span>上下位置</span><input type="range" id="fT" min="0" max="100" step="1" style="height:auto;padding:0;margin:0"><span id="fTv"></span>
+        <span>最小圖片</span><input type="number" id="fK" min="0" max="100" step="1" inputmode="numeric" style="height:auto;font-size:14px;padding:4px 8px;margin:0"><span>KB</span>
+      </div>
+      <div id="ocrLog" style="display:none;margin-top:10px;font-size:12px;line-height:1.5;font-family:monospace;color:var(--mu);word-break:break-all;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;min-height:2.5em">OCR 紀錄：尚無</div>
+    </details>
+    <div id="scanBox"><video id="sv" autoplay playsinline muted></video><div id="reader" style="display:none"></div><div id="ocrBox"></div><div id="scanHint">掃描中…點此手動輸入</div></div>
   </div>
 </section>
 
@@ -119,7 +136,7 @@ summary{cursor:pointer}
 <!-- 3. 檢視 -->
 <section id="s3">
   <div class="top"><button class="g" id="back">← 返回</button><b id="info"></b><button id="del" style="background:var(--er)">🗑 刪除</button></div>
-  <div id="stage"><img id="big" alt="照片"></div>
+  <div id="stage"><img id="big" alt="照片"><div id="pinfo"></div></div>
   <div class="bot">
     <button class="g" id="prev">◀</button>
     <button class="g" id="zo">－</button><span id="zp">100%</span><button class="g" id="zi">＋</button>
@@ -155,6 +172,26 @@ async function api(body){
 }
 const ICON={up:'⏳',ok:'✅',err:'⚠️'};
 
+/* 拍照快門聲（WebAudio 合成，不需音檔；需在使用者點擊後才能發聲） */
+let actx=null;
+function shutterSound(){
+  try{ if(navigator.vibrate) navigator.vibrate(30); }catch(e){}
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended') actx.resume();
+    const click=(t0,freq,dur,vol)=>{
+      const n=Math.floor(actx.sampleRate*dur), buf=actx.createBuffer(1,n,actx.sampleRate), d=buf.getChannelData(0);
+      for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3);
+      const src=actx.createBufferSource(); src.buffer=buf;
+      const bp=actx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=freq; bp.Q.value=0.9;
+      const g=actx.createGain(); g.gain.value=vol;
+      src.connect(bp); bp.connect(g); g.connect(actx.destination); src.start(actx.currentTime+t0);
+    };
+    click(0,3200,0.05,1.0);        // 喀
+    click(0.07,1800,0.08,0.9);     // 嚓
+  }catch(e){}
+}
+
 /* 連續自動對焦（手機支援才會生效，不支援會自動忽略） */
 const AF={focusMode:'continuous'};
 async function autoFocus(track){
@@ -168,6 +205,7 @@ async function autoFocus(track){
 $('order').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); if($('order').value.trim()) startScan('serial'); } });
 $('serial').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('go').click(); } });
 $('go').onclick=async()=>{
+  cancelGo();
   const o=cleanName($('order').value), sn=cleanName($('serial').value);
   if(!o){ toast('請先輸入或掃描工單'); $('order').focus(); return; }
   order=o; serial=sn; orderActive=true; photos=[]; seq=0; renderThumb();
@@ -275,6 +313,7 @@ $('shot').onclick=async()=>{
   const c=document.createElement('canvas');
   c.width=Math.max(1,Math.round(sw)); c.height=Math.max(1,Math.round(sh));
   c.getContext('2d').drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
+  shutterSound();
   const f=$('flash'); f.style.opacity=.8; setTimeout(()=>f.style.opacity=0,120);
   c.toBlob(blob=>{
     const d=new Date(), z=n=>String(n).padStart(2,'0');
@@ -365,6 +404,10 @@ function openReview(){ show('s3'); renderReview(); }
 function renderReview(){
   const it=photos[cur]; if(!it) return;
   big.src=it.url;
+  const fmt=n=>n>=1048576?(n/1048576).toFixed(2)+' MB':Math.round(n/1024)+' KB';
+  const showInfo=()=>{ const w=big.naturalWidth,h=big.naturalHeight; $('pinfo').textContent=(w&&h?w+'×'+h+' px · ':'')+fmt(it.blob.size); };
+  $('pinfo').textContent=fmt(it.blob.size);
+  if(big.complete && big.naturalWidth) showInfo(); else big.onload=()=>{ if(photos[cur]===it) showInfo(); };
   $('info').textContent=(cur+1)+' / '+photos.length+'  '+ICON[it.state];
   $('prev').disabled=cur===0; $('next').disabled=cur===photos.length-1;
   $('retry').style.display = it.state==='err'?'':'none';
@@ -411,20 +454,22 @@ const sv=$('sv'), sbox=$('scanBox');
 function loadScript(src){ return new Promise((ok,no)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=no; document.head.appendChild(s); }); }
 
 async function startScan(target){
+  cancelGo();
   if(target==='order' && $('order').readOnly) return;
   await closeScan();
   const my=++scanId;
   scanTarget=target; scanned=false;
   $(target).parentElement.appendChild(sbox);     // 掃描畫面疊在該輸入框上，大小與框相同
-  sbox.style.display='block';
+  sbox.style.display='block'; syncOcrUI();
   if('BarcodeDetector' in window){
     try{
-      const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720},advanced:[AF]},audio:false});
+      const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:ocrOn.checked?1920:1280},height:{ideal:ocrOn.checked?1080:720},advanced:[AF]},audio:false});
       await autoFocus(st.getVideoTracks()[0]);
       if(my!==scanId){ st.getTracks().forEach(t=>t.stop()); return; }
       sStream=st; sv.srcObject=st; sv.style.display='block'; $('reader').style.display='none';
       const det=new BarcodeDetector();
       sTimer=setInterval(async()=>{ try{ const r=await det.detect(sv); if(r.length) gotScan(r[0].rawValue); }catch(e){} },250);
+      ocrLoop(my);
       return;
     }catch(e){}
   }
@@ -434,8 +479,152 @@ async function startScan(target){
     if(my!==scanId) return;
     const q=new Html5Qrcode('reader'); h5=q;
     await q.start({facingMode:'environment'},{fps:10,videoConstraints:{facingMode:'environment',advanced:[AF]}},t=>gotScan(t));
-    if(my!==scanId){ closeScan(); }
+    if(my!==scanId){ closeScan(); } else { const t0=curTrack(); if(t0) autoFocus(t0); ocrLoop(my); }
   }catch(e){ if(my===scanId){ toast('無法啟動掃描，請點框手動輸入'); await closeScan(); } }
+}
+/* ---------- 4b. 文字 OCR（掃不到條碼、影像是文字時啟動） ----------
+   OCR 引擎：與 AAEON Windows License Scanner 相同的 OCR.space API（OCREngine 2）
+   辨識邏輯：取「:」之後、「-」之前的字串，例如 Job：TFF2608552-BOXER-6641… → TFF2608552 */
+const ocrOn=$('ocrOn');
+ocrOn.checked=false;                                           // 每次開啟頁面預設關閉 OCR（不記憶開關）
+let frm={w:92,h:72,t:50,k:8,v:2};                                      // 紅框：寬%、高%、上下位置%
+try{ const o=JSON.parse(localStorage.getItem('ocrFrame')||'null'); if(o&&o.w){ const k0=frm.k; frm=Object.assign(frm,o); if(o.v!==2){ frm.k=k0; frm.v=2; } } }catch(e){}   // 舊版存的 10KB 一律改用新預設 8KB
+function applyFrame(){
+  const b=$('ocrBox').style;
+  b.setProperty('--fw',frm.w+'%'); b.setProperty('--fh',frm.h+'%');
+  b.setProperty('--fl',((100-frm.w)/2)+'%'); b.setProperty('--ft',((100-frm.h)*frm.t/100)+'%');
+  $('fK').value=frm.k;
+  $('fW').value=frm.w; $('fH').value=frm.h; $('fT').value=frm.t;
+  $('fWv').textContent=frm.w+'%'; $('fHv').textContent=frm.h+'%'; $('fTv').textContent=frm.t+'%';
+}
+[['fW','w'],['fH','h'],['fT','t'],['fK','k']].forEach(([id,k])=>$(id).addEventListener('input',e=>{
+  frm[k]=+e.target.value; applyFrame();
+  try{ localStorage.setItem('ocrFrame',JSON.stringify(frm)); }catch(e){}
+}));
+function syncOcrUI(){
+  const on=ocrOn.checked && scanTarget==='order';
+  $('ocrBox').style.display=on?'block':'none';
+  $('scanHint').textContent=on?'將 Job: 那一行對準紅框 ／ 點此手動輸入':'掃描中…點此手動輸入';
+  $('frmSet').style.display=ocrOn.checked?'grid':'none';
+  $('ocrLog').style.display=ocrOn.checked?'block':'none';
+}
+applyFrame(); syncOcrUI();
+ocrOn.addEventListener('change',()=>{
+  toast(ocrOn.checked?'OCR 已開啟':'OCR 已關閉');
+  syncOcrUI();
+  if($('s1').classList.contains('on') && sbox.style.display==='block' && scanTarget==='serial') return;   // 正在掃序號：OCR 不適用，不打斷
+  if($('s1').classList.contains('on') && !$('order').readOnly) startScan('order');   // 重新啟動工單框相機並套用 OCR 設定
+});
+const OCR_SPACE_API_KEY='K84865808588957';
+const OCR_MAX_TRIES=20, OCR_GAP=700;      // 每次掃描最多送 20 次、間隔 0.7 秒、可同時 3 張（只送紅框小圖），避免耗盡 API 額度
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function parseJob(txt){
+  const t=(txt||'').replace(/[：﹕]/g,':').replace(/[–—－﹣‐‑]/g,'-');
+  // 標籤容許 OCR 誤判：Job / JOB / J0b / Jo8 / Jab / J0B …；冒號可誤判成 ; . , | !，也可能被漏掉
+  const m=t.match(/J\s?[oO0aAeEuU@8]\s?[bB68hH]\s*[:;.,|!]?\s*([A-Za-z0-9]+)\s*-/);
+  if(!m) return '';
+  let id=m[1].toUpperCase();
+  const k=id.search(/[0-9]/);                                   // 第一個數字之後應全為數字：修正 O→0、I/L→1
+  if(k>0){
+    const fixed=id.slice(0,k)+id.slice(k).replace(/O/g,'0').replace(/[IL]/g,'1');
+    if(/^[A-Z]+[0-9]+$/.test(fixed)) id=fixed;
+  }
+  return (id.length>=5 && /\d/.test(id)) ? id : '';            // 過短或無數字視為誤判
+}
+let ocrMetric=null;
+function ocrFrame(){                                           // 只擷取紅框範圍 → JPEG base64（影像小、辨識快）
+  const vid=(sv.style.display!=='none' && sv.videoWidth)?sv:document.querySelector('#reader video');
+  if(!vid || !vid.videoWidth) return null;
+  const c=sbox.getBoundingClientRect(), f=$('ocrBox').getBoundingClientRect();
+  if(!c.width||!c.height||!f.width) return null;
+  const vw=vid.videoWidth, vh=vid.videoHeight;
+  const sc=Math.max(c.width/vw, c.height/vh);                  // object-fit:cover 縮放比
+  const ox=(vw*sc-c.width)/2, oy=(vh*sc-c.height)/2;           // 被裁掉的邊
+  let sx=(f.left-c.left+ox)/sc, sy=(f.top-c.top+oy)/sc, sw=f.width/sc, sh=f.height/sc;
+  sx=Math.max(0,sx); sy=Math.max(0,sy); sw=Math.min(sw,vw-sx); sh=Math.min(sh,vh-sy);
+  const k=Math.min(1,700/sw);                                 // 縮小上傳尺寸，加快傳輸與辨識
+  const cv=document.createElement('canvas'); cv.width=Math.round(sw*k); cv.height=Math.round(sh*k);
+  const cx=cv.getContext('2d'); try{ cx.filter='grayscale(1) contrast(1.4)'; }catch(e){}
+  cx.drawImage(vid,sx,sy,sw,sh,0,0,cv.width,cv.height);
+  try{                                                         // 本機快速檢查：亮度與清晰度（邊緣強度），避免送出空白/模糊畫面
+    const w=160, h=Math.max(8,Math.round(cv.height*w/cv.width));
+    const sm=document.createElement('canvas'); sm.width=w; sm.height=h;
+    const sx2=sm.getContext('2d'); sx2.drawImage(cv,0,0,w,h);
+    const px=sx2.getImageData(0,0,w,h).data, g=new Float32Array(w*h);
+    let sum=0; for(let i=0;i<w*h;i++){ g[i]=0.299*px[i*4]+0.587*px[i*4+1]+0.114*px[i*4+2]; sum+=g[i]; }
+    let ed=0; for(let y=0;y<h-1;y++) for(let x=0;x<w-1;x++){ const i=y*w+x; ed+=Math.abs(g[i]-g[i+1])+Math.abs(g[i]-g[i+w]); }
+    ocrMetric={bright:Math.round(sum/(w*h)), sharp:+(ed/(w*h)).toFixed(1)};
+  }catch(e){ ocrMetric=null; }
+  return cv.toDataURL('image/jpeg',0.7);
+}
+function curTrack(){
+  const v=(sv.style.display!=='none' && sv.srcObject)?sv:document.querySelector('#reader video');
+  return v && v.srcObject && v.srcObject.getVideoTracks()[0];
+}
+async function refocus(){                                      // 對紅框中心重新對焦一次，再回到連續自動對焦
+  const t=curTrack(); if(!t) return;
+  try{
+    const c=t.getCapabilities?t.getCapabilities():{};
+    if(c.focusMode && c.focusMode.includes('single-shot')){
+      const a={focusMode:'single-shot'};
+      if(c.pointsOfInterest){
+        const vid=(sv.style.display!=='none')?sv:document.querySelector('#reader video');
+        const cb=sbox.getBoundingClientRect(), fb=$('ocrBox').getBoundingClientRect();
+        const sc=Math.max(cb.width/vid.videoWidth, cb.height/vid.videoHeight);
+        const ox=(vid.videoWidth*sc-cb.width)/2, oy=(vid.videoHeight*sc-cb.height)/2;
+        const x=((fb.left+fb.width/2-cb.left+ox)/sc)/vid.videoWidth, y=((fb.top+fb.height/2-cb.top+oy)/sc)/vid.videoHeight;
+        a.pointsOfInterest=[{x:Math.min(1,Math.max(0,x)),y:Math.min(1,Math.max(0,y))}];
+      }
+      await t.applyConstraints({advanced:[a]});
+      await sleep(600);                                        // 等對焦完成
+    }
+  }catch(e){}
+  await autoFocus(t);                                          // 回到連續自動對焦
+}
+const OCR_FALLBACK_MS=5000;                    // 保底等待時間：連續這麼久沒有達標畫面，就送出期間最大的一張
+let ocrN=0, ocrLines=[];
+function ocrLog(line,wait){
+  if(ocrLines.length && ocrLines[0].startsWith('…')) ocrLines.shift();   // 等待訊息只保留最新一行
+  ocrLines.unshift(line); ocrLines=ocrLines.slice(0,6);
+  $('ocrLog').innerHTML=ocrLines.map(x=>x.replace(/&/g,'&amp;').replace(/</g,'&lt;')).join('<br>');
+}
+async function ocrCall(img,my,mt,tag){
+  const no=++ocrN, lb='#'+no+(tag?'（保底）':''), t0=performance.now(), kb=Math.round(img.length*0.75/1024);
+  const sec=()=>((performance.now()-t0)/1000).toFixed(1)+'s';
+  try{
+    const fd=new FormData();
+    fd.append('base64Image',img); fd.append('apikey',OCR_SPACE_API_KEY);
+    fd.append('language','eng'); fd.append('OCREngine','2');
+    const r=await fetch('https://api.ocr.space/parse/image',{method:'POST',body:fd});
+    if(!r.ok){ ocrLog(lb+' '+sec()+' ✖ HTTP '+r.status+'（'+kb+'KB）'); return; }
+    const d=await r.json();
+    if(d.IsErroredOnProcessing){ ocrLog(lb+' '+sec()+' ✖ 服務錯誤：'+[].concat(d.ErrorMessage||d.ErrorDetails||'').join(' ').slice(0,80)); return; }
+    const raw=(d.ParsedResults||[]).map(p=>p.ParsedText||'').join('\n');
+    const id=parseJob(raw);
+    ocrLog(lb+' '+sec()+' '+kb+'KB'+(mt?' s'+mt.sharp+' b'+mt.bright:'')+' '+(id?'✔ '+id:'✖ 原文：「'+(raw.replace(/\s+/g,' ').trim().slice(0,70)||'（空白）')+'」'));
+    if(my!==scanId || scanned || !ocrOn.checked) return;
+    if(id && scanTarget==='order') gotScan(id,true);             // OCR 結果只會填入工單欄
+  }catch(e){ ocrLog(lb+' '+sec()+' ✖ 連線失敗：'+(e&&e.message||e)); }
+}
+async function ocrLoop(my){
+  if(!ocrOn.checked || scanTarget!=='order') return;           // 未開啟 OCR，或不是工單欄位 → 不啟動
+  ocrN=0; ocrLines=[]; $('ocrLog').textContent='OCR 紀錄：辨識中…';
+  await refocus();                                             // 先對紅框對焦再開始辨識
+  let inflight=0, sent=0, it=0, best={kb:0}, lastSend=performance.now(); const tStart=performance.now();                                      // 不等上一張回應就送下一張（最多同時 3 張）
+  while(sent<OCR_MAX_TRIES && it<80 && my===scanId && !scanned && ocrOn.checked && scanTarget==='order'){
+    if(it++>0 && it%7===1 && inflight===0){ await refocus(); if(my!==scanId||scanned) return; }   // 約每 5 秒重新對焦
+    if(inflight<3){
+      const img=ocrFrame();
+      const kb=img?Math.round(img.length*0.75/1024):0;
+      if(img && kb>best.kb) best={kb,img,mt:ocrMetric};              // 記住這段時間內最大（最清楚）的一張
+      const ready=kb>=(+frm.k||0);                                // 圖片小於設定的 KB（通常是空白/模糊畫面）就不送
+      const stale=(performance.now()-lastSend)>OCR_FALLBACK_MS;   // 保底：超過 5 秒都沒有達標的畫面
+      if(img && ready){ sent++; inflight++; lastSend=performance.now(); best={kb:0}; ocrCall(img,my,ocrMetric).finally(()=>inflight--); }
+      else if(stale && best.img){ sent++; inflight++; lastSend=performance.now(); const b=best; best={kb:0}; ocrCall(b.img,my,b.mt,true).finally(()=>inflight--); }
+      else if(img){ ocrLog('… 圖片 '+kb+'KB < '+frm.k+'KB，不送出，等待清晰畫面', true); }
+    }
+    await sleep(OCR_GAP);
+  }
 }
 async function closeScan(){
   scanId++;
@@ -444,12 +633,35 @@ async function closeScan(){
   if(h5){ const q=h5; h5=null; try{await q.stop();}catch(e){} try{q.clear();}catch(e){} }
   sbox.style.display='none';
 }
-async function gotScan(t){
-  if(scanned) return; scanned=true;
+let goTimer=null;
+function cancelGo(){ if(goTimer){ clearTimeout(goTimer); goTimer=null; } $('pend').style.display='none'; }
+function scheduleGo(){                           // 序號掃到後不自動跳轉，只在綠框顯示讀到的字串（字級自動縮放填滿綠框）
+  const el=$('pend');
+  el.textContent=$('serial').value;
+  el.style.display='flex';
+  let fs=44; el.style.fontSize=fs+'px';
+  const maxW=el.clientWidth-24;
+  const sp=document.createElement('span'); sp.style.cssText='display:inline-block'; sp.textContent=el.textContent;
+  el.textContent=''; el.appendChild(sp);
+  while(fs>10 && sp.offsetWidth>maxW){ fs-=1; el.style.fontSize=fs+'px'; }
+}
+$('pend').onclick=()=>{ $('pend').style.display='none'; };
+$('serial').addEventListener('focus',cancelGo);
+$('serial').addEventListener('input',cancelGo);
+const SERIAL_DELAY=1500;                       // 工單掃完 → 序號相機開啟前的停頓（毫秒）
+async function gotScan(t,fromOcr){
+  if(scanned) return;
+  if(scanTarget==='order' && ocrOn.checked && !fromOcr) return;   // 開啟 OCR 時，工單欄只接受 Job: 的 OCR 結果，忽略條碼
+  if(scanTarget==='serial' && t===$('order').value) return;     // 切換瞬間仍對著工單條碼，不要誤填進序號
+  scanned=true;
   const tg=scanTarget; $(tg).value=t; toast('已讀取：'+t);
   await closeScan();
-  if(tg==='serial') $('go').click();          // 序號掃到後自動開始拍照
-  else startScan('serial');                    // 工單掃到後，序號框接著開始掃描
+  if(tg==='serial') scheduleGo();             // 序號掃到後：只顯示提示，不自動跳轉
+  else{                                         // 工單掃到後：停頓 1.5 秒（讓人移到序號條碼），再開啟序號相機
+    const my=scanId;
+    await sleep(SERIAL_DELAY);
+    if(my===scanId && $('s1').classList.contains('on')) startScan('serial');
+  }
 }
 sbox.onclick=async()=>{ const t=scanTarget; await closeScan(); $(t).focus(); };   // 點框 → 改手動輸入
 $('scanOrder').onclick=()=>startScan('order');
